@@ -1,0 +1,22 @@
+################### Lambdabeat Configuration Example #########################
+
+############################# Lambdabeat ######################################
+
+lambdabeat:
+  # Defines how often an event is sent to the output
+  period: 60s
+  # Defines the interval in which to group Lambda metrics
+  interval: 60s
+
+output:
+  elasticsearch:
+    hosts: ["http://localhost:9200"]
+
+# A template is used to set the mapping in Elasticsearch
+# By default template loading is disabled and no template is loaded.
+# These settings can be adjusted to load your own template or overwrite existing ones
+template:
+  # Path to template file
+  path: "lambdabeat.template.json"
+
+functions: ["infra-issue-stats"]

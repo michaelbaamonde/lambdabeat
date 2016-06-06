@@ -1,0 +1,13 @@
+################### Lambdabeat Configuration Example #########################
+
+############################# Lambdabeat ######################################
+
+lambdabeat:
+  # Defines how often an event is sent to the output
+  period: 300s
+  # Defines the interval in which to group Lambda metrics
+  interval: 60s
+
+output:
+  elasticsearch:
+    hosts: ["http://localhost:9200"]
