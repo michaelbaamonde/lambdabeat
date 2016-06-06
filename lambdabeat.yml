@@ -7,6 +7,12 @@ lambdabeat:
   period: 60s
   # Defines the interval in which to group Lambda metrics
   interval: 60s
+  # Lambda functions for which to collect metrics
+  functions: ["infra-issue-stats"]
+  # Metrics to collect
+  metrics: ["Invocations", "Duration"]
+  # Optionally specify a start date for historical ingest
+  backfill_date: "2016-06-06T00:00:00.000Z"
 
 output:
   elasticsearch:
@@ -18,5 +24,3 @@ output:
 template:
   # Path to template file
   path: "lambdabeat.template.json"
-
-functions: ["infra-issue-stats"]

@@ -1,6 +1,7 @@
 package beater
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -69,6 +70,7 @@ func GetFunctionMetric(metric string, start time.Time, end time.Time, functionNa
 /// *** Beater interface methods ***///
 
 func (bt *Lambdabeat) Config(b *beat.Beat) error {
+
 	// Load beater beatConfig
 	err := b.RawConfig.Unpack(&bt.beatConfig)
 	if err != nil {
@@ -79,38 +81,55 @@ func (bt *Lambdabeat) Config(b *beat.Beat) error {
 }
 
 func (bt *Lambdabeat) Setup(b *beat.Beat) error {
-	if bt.beatConfig.Lambdabeat.Period == "" {
-		bt.beatConfig.Lambdabeat.Period = "300s"
+
+	cfg := bt.beatConfig.Lambdabeat
+
+	if cfg.Period != "" {
+		period, err := time.ParseDuration(cfg.Period)
+		if err != nil {
+			return err
+		} else {
+			bt.period = period
+		}
+	} else {
+		period, err := time.ParseDuration("300s")
+		if err != nil {
+			return err
+		} else {
+			bt.period = period
+		}
 	}
 
-	if bt.beatConfig.Lambdabeat.Metrics == nil {
-		bt.beatConfig.Lambdabeat.Metrics = []string{"Invocations", "Duration"}
+	if cfg.Metrics != nil {
+		bt.metrics = cfg.Metrics
+	} else {
+		bt.metrics = []string{"Invocations", "Duration", "Errors"}
 	}
 
-	if bt.beatConfig.Lambdabeat.Functions == nil {
-		bt.beatConfig.Lambdabeat.Functions = []string{"infra-issue-stats"}
+	if cfg.Functions != nil {
+		bt.functions = cfg.Functions
+	} else {
+		return errors.New("Must provide a list of Lambda functions.")
+	}
+
+	if cfg.BackfillDate != "" {
+		t, err := time.Parse(common.TsLayout, cfg.BackfillDate)
+		if err != nil {
+			return err
+		} else {
+			bt.lastTime = t
+		}
+	} else {
+		bt.lastTime = time.Now()
 	}
 
 	bt.client = b.Publisher.Connect()
 
-	var err error
-	bt.period, err = time.ParseDuration(bt.beatConfig.Lambdabeat.Period)
-	if err != nil {
-		return err
-	}
-
-	bt.functions = bt.beatConfig.Lambdabeat.Functions
-	bt.metrics = bt.beatConfig.Lambdabeat.Metrics
-
-	// TODO: make this configurable as a backfill date
-	t, _ := time.Parse(common.TsLayout, "2016-06-06T00:00:00.000Z")
-	bt.lastTime = t
-
-	logp.Info("lambdabeat", "Initializing lambdabeat")
-	logp.Info("lambdabeat", "Period %v\n", bt.period)
-	logp.Info("lambdabeat", "Functions %v\n", bt.functions)
-	logp.Info("lambdabeat", "Metrics %v\n", bt.metrics)
-	logp.Info("lambdabeat", "Time %v\n", bt.lastTime)
+	logp.Debug("lambdabeat", "Initializing lambdabeat")
+	logp.Debug("lambdabeat", "Period: %s\n", bt.period)
+	logp.Debug("lambdabeat", "Functions: %v\n", bt.functions)
+	logp.Debug("lambdabeat", "Metrics: %v\n", bt.metrics)
+	logp.Debug("lambdabeat", "Time: %s\n", bt.lastTime)
 
 	return nil
 }
