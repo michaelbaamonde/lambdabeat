@@ -33,7 +33,7 @@ func New() *Lambdabeat {
 	}
 }
 
-func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string) *cloudwatch.GetMetricStatisticsOutput {
+func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string) (*cloudwatch.GetMetricStatisticsOutput, error) {
 	// TODO: make region configurable
 	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String("us-east-1")})
 
@@ -59,8 +59,11 @@ func GetFunctionMetric(metric string, start time.Time, end time.Time, functionNa
 	}
 	resp, err := svc.GetMetricStatistics(params)
 
-	logp.Info("error: %v", err)
-	return resp
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 /// *** Beater interface methods ***///
@@ -112,40 +115,42 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 	return nil
 }
 
-func FetchMetric(fn string, metric string, start time.Time, end time.Time) []map[string]interface{} {
-	// TODO: make a type for this
-	var stats []map[string]interface{}
+func FetchMetric(fn string, metric string, start time.Time, end time.Time) ([]common.MapStr, error) {
+	var stats []common.MapStr
 
-	data := GetFunctionMetric(metric, start, end, fn)
+	data, err := GetFunctionMetric(metric, start, end, fn)
 
-	for _, d := range data.Datapoints {
-		//		timestr := d.Timestamp.String()
-		//		logp.Info("TIME STRING: %v", timestr)
-		timestr := d.Timestamp.Format(common.TsLayout)
-		t, _ := common.ParseTime(timestr)
+	if err != nil {
+		return nil, err
+	} else {
+		for _, d := range data.Datapoints {
+			timestr := d.Timestamp.Format(common.TsLayout)
+			t, _ := common.ParseTime(timestr)
 
-		event := common.MapStr{
-			"type":         "metric",
-			"function":     fn,
-			"metric":       metric,
-			"@timestamp":   t,
-			"average":      d.Average,
-			"maximum":      d.Maximum,
-			"minimum":      d.Minimum,
-			"sample-count": d.SampleCount,
-			"sum":          d.Sum,
-			"unit":         d.Unit,
+			event := common.MapStr{
+				"type":         "metric",
+				"function":     fn,
+				"metric":       metric,
+				"@timestamp":   t,
+				"average":      d.Average,
+				"maximum":      d.Maximum,
+				"minimum":      d.Minimum,
+				"sample-count": d.SampleCount,
+				"sum":          d.Sum,
+				"unit":         d.Unit,
+			}
+			stats = append(stats, event)
 		}
-		stats = append(stats, event)
-	}
 
-	return stats
+		return stats, nil
+	}
 }
 
 func (bt *Lambdabeat) Run(b *beat.Beat) error {
 	logp.Info("lambdabeat is running! Hit CTRL-C to stop it.")
 
 	ticker := time.NewTicker(bt.period)
+
 	for {
 		select {
 		case <-bt.done:
@@ -154,13 +159,17 @@ func (bt *Lambdabeat) Run(b *beat.Beat) error {
 		}
 
 		now := time.Now()
-		logp.Info("doing things")
+
 		for _, fn := range bt.functions {
 			for _, m := range bt.metrics {
-				events := FetchMetric(fn, m, bt.lastTime, now)
-				for _, event := range events {
-					bt.client.PublishEvent(event)
-					logp.Info("Event sent")
+				events, err := FetchMetric(fn, m, bt.lastTime, now)
+				if err != nil {
+					logp.Err("error: %v", err)
+				} else {
+					for _, event := range events {
+						bt.client.PublishEvent(event)
+						logp.Info("Event sent")
+					}
 				}
 			}
 		}
