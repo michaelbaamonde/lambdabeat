@@ -13,6 +13,8 @@ lambdabeat:
   metrics: ["Invocations", "Duration"]
   # Optionally specify a start date for historical ingest
   backfill_date: "2016-06-06T00:00:00.000Z"
+  region: "us-east-1"
+
 
 output:
   elasticsearch:

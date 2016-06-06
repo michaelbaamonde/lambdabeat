@@ -25,6 +25,7 @@ type Lambdabeat struct {
 	client     publisher.Client
 	metrics    []string
 	functions  []string
+	region     string
 }
 
 // Creates beater
@@ -34,9 +35,9 @@ func New() *Lambdabeat {
 	}
 }
 
-func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string) (*cloudwatch.GetMetricStatisticsOutput, error) {
+func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string, region string) (*cloudwatch.GetMetricStatisticsOutput, error) {
 	// TODO: make region configurable
-	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String("us-east-1")})
+	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String(region)})
 
 	params := &cloudwatch.GetMetricStatisticsInput{
 		EndTime:    aws.Time(end),
@@ -123,6 +124,12 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		bt.lastTime = time.Now()
 	}
 
+	if cfg.Region != "" {
+		bt.region = cfg.Region
+	} else {
+		return errors.New("Must provide an AWS region.")
+	}
+
 	bt.client = b.Publisher.Connect()
 
 	logp.Debug("lambdabeat", "Initializing lambdabeat")
@@ -134,10 +141,10 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 	return nil
 }
 
-func FetchMetric(fn string, metric string, start time.Time, end time.Time) ([]common.MapStr, error) {
+func FetchMetric(fn string, metric string, start time.Time, end time.Time, region string) ([]common.MapStr, error) {
 	var stats []common.MapStr
 
-	data, err := GetFunctionMetric(metric, start, end, fn)
+	data, err := GetFunctionMetric(metric, start, end, fn, region)
 
 	if err != nil {
 		return nil, err
@@ -181,7 +188,7 @@ func (bt *Lambdabeat) Run(b *beat.Beat) error {
 
 		for _, fn := range bt.functions {
 			for _, m := range bt.metrics {
-				events, err := FetchMetric(fn, m, bt.lastTime, now)
+				events, err := FetchMetric(fn, m, bt.lastTime, now, bt.region)
 				if err != nil {
 					logp.Err("error: %v", err)
 				} else {

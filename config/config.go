@@ -13,4 +13,5 @@ type LambdabeatConfig struct {
 	Functions    []string `config:"functions"`
 	Metrics      []string `config:"metrics"`
 	BackfillDate string   `config:"backfill_date"`
+	Region       string   `config:"region"`
 }
