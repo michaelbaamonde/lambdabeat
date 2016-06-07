@@ -36,38 +36,6 @@ func New() *Lambdabeat {
 	}
 }
 
-func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string, region string, interval int64) (*cloudwatch.GetMetricStatisticsOutput, error) {
-	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String(region)})
-
-	params := &cloudwatch.GetMetricStatisticsInput{
-		EndTime:    aws.Time(end),
-		MetricName: aws.String(metric),
-		Namespace:  aws.String("AWS/Lambda"),
-		Period:     aws.Int64(interval),
-		StartTime:  aws.Time(start),
-		Statistics: []*string{
-			aws.String("Average"),
-			aws.String("Maximum"),
-			aws.String("Minimum"),
-			aws.String("SampleCount"),
-			aws.String("Sum"),
-		},
-		Dimensions: []*cloudwatch.Dimension{
-			{
-				Name:  aws.String("FunctionName"),
-				Value: aws.String(functionName),
-			},
-		},
-	}
-	resp, err := svc.GetMetricStatistics(params)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
-}
-
 /// *** Beater interface methods ***///
 
 func (bt *Lambdabeat) Config(b *beat.Beat) error {
@@ -147,10 +115,33 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 	return nil
 }
 
-func (bt *Lambdabeat) FetchMetric(fn string, metric string, end time.Time) ([]common.MapStr, error) {
+func (bt *Lambdabeat) FetchFunctionMetric(fn string, metric string, end time.Time) ([]common.MapStr, error) {
 	var stats []common.MapStr
 
-	data, err := GetFunctionMetric(metric, bt.lastTime, end, fn, bt.region, bt.interval)
+	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String(bt.region)})
+
+	params := &cloudwatch.GetMetricStatisticsInput{
+		EndTime:    aws.Time(end),
+		MetricName: aws.String(metric),
+		Namespace:  aws.String("AWS/Lambda"),
+		Period:     aws.Int64(bt.interval),
+		StartTime:  aws.Time(bt.lastTime),
+		Statistics: []*string{
+			aws.String("Average"),
+			aws.String("Maximum"),
+			aws.String("Minimum"),
+			aws.String("SampleCount"),
+			aws.String("Sum"),
+		},
+		Dimensions: []*cloudwatch.Dimension{
+			{
+				Name:  aws.String("FunctionName"),
+				Value: aws.String(fn),
+			},
+		},
+	}
+
+	data, err := svc.GetMetricStatistics(params)
 
 	if err != nil {
 		return nil, err
@@ -194,7 +185,7 @@ func (bt *Lambdabeat) Run(b *beat.Beat) error {
 
 		for _, fn := range bt.functions {
 			for _, m := range bt.metrics {
-				events, err := bt.FetchMetric(fn, m, now)
+				events, err := bt.FetchFunctionMetric(fn, m, now)
 				if err != nil {
 					logp.Err("error: %v", err)
 				} else {
