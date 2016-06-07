@@ -147,10 +147,10 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 	return nil
 }
 
-func FetchMetric(fn string, metric string, start time.Time, end time.Time, region string, interval int64) ([]common.MapStr, error) {
+func (bt *Lambdabeat) FetchMetric(fn string, metric string, end time.Time) ([]common.MapStr, error) {
 	var stats []common.MapStr
 
-	data, err := GetFunctionMetric(metric, start, end, fn, region, interval)
+	data, err := GetFunctionMetric(metric, bt.lastTime, end, fn, bt.region, bt.interval)
 
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func (bt *Lambdabeat) Run(b *beat.Beat) error {
 
 		for _, fn := range bt.functions {
 			for _, m := range bt.metrics {
-				events, err := FetchMetric(fn, m, bt.lastTime, now, bt.region, bt.interval)
+				events, err := bt.FetchMetric(fn, m, now)
 				if err != nil {
 					logp.Err("error: %v", err)
 				} else {
