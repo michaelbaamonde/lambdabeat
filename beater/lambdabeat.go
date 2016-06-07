@@ -75,13 +75,13 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		return errors.New("Interval must be a multiple of 60.")
 	}
 
-	if len(cfg.Metrics) > 1 {
+	if len(cfg.Metrics) >= 1 {
 		bt.metrics = cfg.Metrics
 	} else {
 		bt.metrics = []string{"Invocations", "Duration", "Errors", "Throttles"}
 	}
 
-	if len(cfg.Functions) > 1 {
+	if len(cfg.Functions) >= 1 {
 		bt.functions = cfg.Functions
 	} else {
 		return errors.New("Must provide a list of Lambda functions.")
