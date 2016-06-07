@@ -36,7 +36,6 @@ func New() *Lambdabeat {
 }
 
 func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string, region string) (*cloudwatch.GetMetricStatisticsOutput, error) {
-	// TODO: make region configurable
 	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String(region)})
 
 	params := &cloudwatch.GetMetricStatisticsInput{
