@@ -100,13 +100,13 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		}
 	}
 
-	if cfg.Metrics != nil {
+	if len(cfg.Metrics) > 1 {
 		bt.metrics = cfg.Metrics
 	} else {
-		bt.metrics = []string{"Invocations", "Duration", "Errors"}
+		bt.metrics = []string{"Invocations", "Duration", "Errors", "Throttles"}
 	}
 
-	if cfg.Functions != nil {
+	if len(cfg.Functions) > 1 {
 		bt.functions = cfg.Functions
 	} else {
 		return errors.New("Must provide a list of Lambda functions.")
