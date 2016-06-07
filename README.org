@@ -1,0 +1,194 @@
+#+TITLE: Lambdabeat
+
+* Overview
+
+Lambdabeat allows you to ship AWS Lambda metrics (by way of the Cloudwatch API)
+to Elasticsearch.
+
+* Configuration
+
+** AWS: Credentials and Region
+
+Lambdabeat fetches data from the Cloudwatch API. As such, it does not need to be
+deployed anywhere in particular, but it does require valid AWS credentials to be
+specified either:
+
+1. In an AWS configuration file located at =~/.aws/credentials.=
+2. As environment variables (=AWS_ACCESS_KEY_ID= and =AWS_SECRET_ACCESS_KEY=.)
+
+See [[https://github.com/aws/aws-sdk-go#configuring-credentials][here]] for further details regarding credentials.
+
+Additionally, Lambdabeat requires that a default AWS region be set in the
+=lambdabeat.yml= configuration file.
+
+** Functions
+
+Simply specify an array of Lambda functions for which you would like to retrieve
+metrics in =lambdabeat.yml= like so:
+
+#+BEGIN_EXAMPLE
+  lambdabeat:
+    functions: ["foo", "bar", "baz", "qux"]
+#+END_EXAMPLE
+
+** Metrics
+
+Cloudwatch maintains data for these metrics with respect to Lambda:
+
+- =Invocations=
+- =Errors=
+- =Duration=
+- =Throttles=
+
+These are largely self-explanatory, but see [[http://docs.aws.amazon.com/lambda/latest/dg/monitoring-functions-metrics.html][here]] for details and subtleties.
+
+Once more, specify which metrics you would like to fetch and ship in
+=lambdabeat.yml= in the following fashion:
+
+#+BEGIN_EXAMPLE
+  lambdabeat:
+      metrics: ["Invocations", "Duration"]
+#+END_EXAMPLE
+
+** Period and Interval
+
+Unlike many (really, most) other Beats, Lambdabeat's notion of a =period= does
+not necessarily determine the timestamps of the events being indexed. Rather, the
+Cloudwatch API provides data between two points in time at a given,
+user-specified interval. This is configured via the =interval= key in
+=lambdabeat.yml=.
+
+Separately, the =period= key specifies how often Lambdabeat itself should run.
+As such, the value of the =@timestamp= field for each event is *not* the time at
+which Lambdabeat fetched the data; it's the time for which Cloudwatch has
+returned data. At query time, this is an unimportant implementation detail. What
+matters is that the events indexed into Elasticsearch are timestamped in a
+meaningful matter, which they are. It is important, however, to understand the
+distinction at /configuration time/.
+
+Note that the value of =interval= *must* be a multiple of 60. Note also that it
+only really makes sense for =period= to be greater than or equal to =interval=.
+
+** Backfilling data
+
+If you would like to index data that predates the first invocation of
+Lambdabeat, you may do so by specifying a =backfill_date= in =lambdabeat.yml=.
+This will fetch and index all data between =backfill_date= and the time at which
+Lambdabeat begins running. Note that (currently) separate, date-based indices
+are *not* created for historical data sets; everything will be in the index
+corresponding to the day on which Lambdabeat was invoked.
+
+This feature is currently experimental and will likely be re-implemented
+entirely.
+
+** Outputs
+
+Lambdabeat currently supports Elasticsearch as an output. Simply provide an
+array of hosts in =lambdabeat.yml= like so:
+
+#+BEGIN_EXAMPLE
+  output:
+    elasticsearch:
+      hosts: ["http://localhost:9200"]
+#+END_EXAMPLE
+
+Lambdabeat introduces no novel infrastructure with respect to outputs.
+
+* Development
+*** Requirements
+
+- [[https://golang.org/dl/][Golang]] 1.6
+- [[https://github.com/Masterminds/glide][Glide]] >= 0.10.0
+
+*** Build
+
+To build the binary for Lambdabeat run the command below. This will
+generate a binary in the same directory with the name lambdabeat.
+
+#+BEGIN_EXAMPLE
+    make
+#+END_EXAMPLE
+
+*** Run
+
+To run Lambdabeat with debugging output enabled, run:
+
+#+BEGIN_EXAMPLE
+    ./lambdabeat -c lambdabeat.yml -e -d "*"
+#+END_EXAMPLE
+
+*** Test
+
+To test Lambdabeat, run the following command:
+
+#+BEGIN_EXAMPLE
+    make testsuite
+#+END_EXAMPLE
+
+alternatively:
+
+#+BEGIN_EXAMPLE
+    make unit-tests
+    make system-tests
+    make integration-tests
+    make coverage-report
+#+END_EXAMPLE
+
+The test coverage is reported in the folder =./build/coverage/=
+
+*** Package
+
+To be able to package Lambdabeat the requirements are as follows:
+
+-  [[https://docs.docker.com/engine/installation/][Docker Environment]]
+   >= 1.10
+-  $GOPATH/bin must be part of $PATH:
+   =export PATH=${PATH}:${GOPATH}/bin=
+
+To cross-compile and package Lambdabeat for all supported platforms, run
+the following commands:
+
+#+BEGIN_EXAMPLE
+    cd dev-tools/packer
+    make deps
+    make images
+    make
+#+END_EXAMPLE
+
+*** Update
+
+Each beat has a template for the mapping in elasticsearch and a
+documentation for the fields which is automatically generated based on
+=etc/fields.yml=. To generate etc/lambdabeat.template.json and
+etc/lambdabeat.asciidoc
+
+#+BEGIN_EXAMPLE
+    make update
+#+END_EXAMPLE
+
+*** Cleanup
+
+To clean Lambdabeat source code, run the following commands:
+
+#+BEGIN_EXAMPLE
+    make fmt
+    make simplify
+#+END_EXAMPLE
+
+To clean up the build directory and generated artifacts, run:
+
+#+BEGIN_EXAMPLE
+    make clean
+#+END_EXAMPLE
+
+*** Clone
+
+To clone Lambdabeat from the git repository, run the following commands:
+
+#+BEGIN_EXAMPLE
+    mkdir -p ${GOPATH}/github.com/michaelbaamonde
+    cd ${GOPATH}/github.com/michaelbaamonde
+    git clone https://github.com/michaelbaamonde/lambdabeat
+#+END_EXAMPLE
+
+For further development, check out the [[https://www.elastic.co/guide/en/beats/libbeat/current/new-beat.html][beat developer guide]].
