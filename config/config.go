@@ -9,7 +9,7 @@ type Config struct {
 
 type LambdabeatConfig struct {
 	Period       string   `config:"period"`   // how often to run lambdabeat
-	Interval     string   `config:"interval"` // time interval for statistics
+	Interval     int64    `config:"interval"` // time interval for statistics
 	Functions    []string `config:"functions"`
 	Metrics      []string `config:"metrics"`
 	BackfillDate string   `config:"backfill_date"`

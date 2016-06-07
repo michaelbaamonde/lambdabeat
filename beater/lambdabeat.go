@@ -21,6 +21,7 @@ type Lambdabeat struct {
 	beatConfig *config.Config
 	done       chan struct{}
 	period     time.Duration
+	interval   int64
 	lastTime   time.Time
 	client     publisher.Client
 	metrics    []string
@@ -35,14 +36,14 @@ func New() *Lambdabeat {
 	}
 }
 
-func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string, region string) (*cloudwatch.GetMetricStatisticsOutput, error) {
+func GetFunctionMetric(metric string, start time.Time, end time.Time, functionName string, region string, interval int64) (*cloudwatch.GetMetricStatisticsOutput, error) {
 	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String(region)})
 
 	params := &cloudwatch.GetMetricStatisticsInput{
 		EndTime:    aws.Time(end),
 		MetricName: aws.String(metric),
 		Namespace:  aws.String("AWS/Lambda"),
-		Period:     aws.Int64(60),
+		Period:     aws.Int64(interval),
 		StartTime:  aws.Time(start),
 		Statistics: []*string{
 			aws.String("Average"),
@@ -100,6 +101,12 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		}
 	}
 
+	if cfg.Interval%60 == 0 {
+		bt.interval = cfg.Interval
+	} else {
+		return errors.New("Interval must be a multiple of 60.")
+	}
+
 	if len(cfg.Metrics) > 1 {
 		bt.metrics = cfg.Metrics
 	} else {
@@ -140,10 +147,10 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 	return nil
 }
 
-func FetchMetric(fn string, metric string, start time.Time, end time.Time, region string) ([]common.MapStr, error) {
+func FetchMetric(fn string, metric string, start time.Time, end time.Time, region string, interval int64) ([]common.MapStr, error) {
 	var stats []common.MapStr
 
-	data, err := GetFunctionMetric(metric, start, end, fn, region)
+	data, err := GetFunctionMetric(metric, start, end, fn, region, interval)
 
 	if err != nil {
 		return nil, err
@@ -187,7 +194,7 @@ func (bt *Lambdabeat) Run(b *beat.Beat) error {
 
 		for _, fn := range bt.functions {
 			for _, m := range bt.metrics {
-				events, err := FetchMetric(fn, m, bt.lastTime, now, bt.region)
+				events, err := FetchMetric(fn, m, bt.lastTime, now, bt.region, bt.interval)
 				if err != nil {
 					logp.Err("error: %v", err)
 				} else {
