@@ -74,9 +74,7 @@ only really makes sense for =period= to be greater than or equal to =interval=.
 If you would like to index data that predates the first invocation of
 Lambdabeat, you may do so by specifying a =backfill_date= in =lambdabeat.yml=.
 This will fetch and index all data between =backfill_date= and the time at which
-Lambdabeat begins running. Note that (currently) separate, date-based indices
-are *not* created for historical data sets; everything will be in the index
-corresponding to the day on which Lambdabeat was invoked.
+Lambdabeat begins running.
 
 This feature is currently experimental and will likely be re-implemented
 entirely.
