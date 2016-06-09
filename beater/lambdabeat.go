@@ -117,6 +117,37 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 	return nil
 }
 
+func (bt *Lambdabeat) Run(b *beat.Beat) error {
+	logp.Info("lambdabeat is running! Hit CTRL-C to stop it.")
+
+	ticker := time.NewTicker(bt.period)
+
+	for {
+		select {
+		case <-bt.done:
+			return nil
+		case <-ticker.C:
+		}
+		if !bt.backfill.IsZero() {
+			logp.Info("running backfill: %v", bt.backfill)
+			bt.RunBackfill()
+		} else {
+			logp.Info("running periodic")
+			bt.RunPeriodic()
+		}
+	}
+}
+
+func (bt *Lambdabeat) Cleanup(b *beat.Beat) error {
+	return nil
+}
+
+func (bt *Lambdabeat) Stop() {
+	close(bt.done)
+}
+
+/// *** Processing logic ***///
+
 func (bt *Lambdabeat) FetchFunctionMetric(fn string, metric string, end time.Time) ([]common.MapStr, error) {
 	var stats []common.MapStr
 
@@ -171,27 +202,6 @@ func (bt *Lambdabeat) FetchFunctionMetric(fn string, metric string, end time.Tim
 	}
 }
 
-func (bt *Lambdabeat) Run(b *beat.Beat) error {
-	logp.Info("lambdabeat is running! Hit CTRL-C to stop it.")
-
-	ticker := time.NewTicker(bt.period)
-
-	for {
-		select {
-		case <-bt.done:
-			return nil
-		case <-ticker.C:
-		}
-		if !bt.backfill.IsZero() {
-			logp.Info("running backfill: %v", bt.backfill)
-			bt.RunBackfill()
-		} else {
-			logp.Info("running periodic")
-			bt.RunPeriodic()
-		}
-	}
-}
-
 func (bt *Lambdabeat) RunPeriodic() error {
 	now := time.Now()
 
@@ -213,10 +223,61 @@ func (bt *Lambdabeat) RunPeriodic() error {
 	return nil
 }
 
-func (bt *Lambdabeat) Cleanup(b *beat.Beat) error {
-	return nil
+// Backfilling
+
+const maxDatapoints = 1440
+
+type dateRange struct {
+	start time.Time
+	end   time.Time
 }
 
-func (bt *Lambdabeat) Stop() {
-	close(bt.done)
+// Given a date range and an interval, chunk the range into a sequence of ranges
+// such that no single range exceeds maxDatapoints.
+func PartitionDateRange(start time.Time, end time.Time, interval int64) []dateRange {
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+
+	offset := maxDatapoints * interval
+
+	var ranges []dateRange
+
+	for t := startUnix; t < endUnix; t += offset {
+		t1 := time.Unix(t, 0)
+		t2 := time.Unix((t + offset), 0)
+
+		r := dateRange{start: t1, end: t2}
+		ranges = append(ranges, r)
+	}
+
+	return ranges
+
+}
+
+func (bt *Lambdabeat) RunBackfill() error {
+	end := time.Now()
+
+	ranges := PartitionDateRange(bt.backfill, end, bt.interval)
+
+	for _, r := range ranges {
+		logp.Info("start: %v, end: %v", r.start, r.end)
+		for _, fn := range bt.functions {
+			for _, m := range bt.metrics {
+				bt.lastTime = r.start
+				events, err := bt.FetchFunctionMetric(fn, m, r.end)
+				if err != nil {
+					logp.Err("error: %v", err)
+				} else {
+					for _, event := range events {
+						bt.client.PublishEvent(event)
+						logp.Info("Event sent")
+					}
+				}
+			}
+		}
+	}
+
+	bt.Stop()
+
+	return nil
 }
