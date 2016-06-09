@@ -19,16 +19,17 @@ import (
 )
 
 type Lambdabeat struct {
-	beatConfig *config.Config
-	done       chan struct{}
-	period     time.Duration
-	interval   int64
-	lastTime   time.Time
-	client     publisher.Client
-	metrics    []string
-	functions  []string
-	region     string
-	backfill   time.Time
+	beatConfig             *config.Config
+	done                   chan struct{}
+	period                 time.Duration
+	interval               int64
+	lastTime               time.Time
+	client                 publisher.Client
+	metrics                []string
+	functions              []string
+	functionConfigurations map[string]lambda.FunctionConfiguration
+	region                 string
+	backfill               time.Time
 }
 
 // Creates beater
@@ -94,6 +95,25 @@ func ListAllLambdaFunctions(region string) ([]string, error) {
 	return fns, nil
 }
 
+func (bt *Lambdabeat) FetchFunctionConfigs() error {
+	svc := lambda.New(session.New(), &aws.Config{Region: aws.String(bt.region)})
+
+	for _, fn := range bt.functions {
+		params := &lambda.GetFunctionInput{
+			FunctionName: aws.String(fn),
+		}
+		data, err := svc.GetFunction(params)
+
+		if err != nil {
+			return err
+		}
+
+		config := *data.Configuration
+		bt.functionConfigurations[fn] = config
+	}
+	return nil
+}
+
 func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 
 	cfg := bt.beatConfig.Lambdabeat
@@ -153,6 +173,13 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		}
 		logp.Info("No functions configured, using: %v", fns)
 		bt.functions = fns
+	}
+
+	bt.functionConfigurations = make(map[string]lambda.FunctionConfiguration)
+	err := bt.FetchFunctionConfigs()
+
+	if err != nil {
+		return err
 	}
 
 	bt.client = b.Publisher.Connect()
@@ -228,21 +255,31 @@ func (bt *Lambdabeat) FetchFunctionMetric(fn string, metric string, end time.Tim
 	if err != nil {
 		return nil, err
 	} else {
+		fnConfig := bt.functionConfigurations[fn]
+
 		for _, d := range data.Datapoints {
 			timestr := d.Timestamp.Format(common.TsLayout)
 			t, _ := common.ParseTime(timestr)
 
 			event := common.MapStr{
-				"type":         "metric",
-				"function":     fn,
-				"metric":       metric,
-				"@timestamp":   t,
-				"average":      d.Average,
-				"maximum":      d.Maximum,
-				"minimum":      d.Minimum,
-				"sample-count": d.SampleCount,
-				"sum":          d.Sum,
-				"unit":         d.Unit,
+				"type":          "metric",
+				"function":      fn,
+				"metric":        metric,
+				"@timestamp":    t,
+				"average":       d.Average,
+				"maximum":       d.Maximum,
+				"minimum":       d.Minimum,
+				"sample-count":  d.SampleCount,
+				"sum":           d.Sum,
+				"unit":          d.Unit,
+				"description":   *fnConfig.Description,
+				"last-modified": *fnConfig.LastModified,
+				"memory-size":   *fnConfig.MemorySize,
+				"runtime":       *fnConfig.Runtime,
+				"code-size":     *fnConfig.CodeSize,
+				"handler":       *fnConfig.Handler,
+				"timeout":       *fnConfig.Timeout,
+				"version":       *fnConfig.Version,
 			}
 			stats = append(stats, event)
 		}
