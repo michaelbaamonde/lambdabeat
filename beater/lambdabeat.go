@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	"github.com/aws/aws-sdk-go/service/lambda"
 )
 
 type Lambdabeat struct {
@@ -48,6 +49,27 @@ func (bt *Lambdabeat) Config(b *beat.Beat) error {
 	}
 
 	return nil
+}
+
+// List all Lambda functions
+
+func ListAllLambdaFunctions(region string) ([]string, error) {
+	svc := lambda.New(session.New(), &aws.Config{Region: aws.String(region)})
+
+	data, err := svc.ListFunctions(nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var fns []string
+
+	for _, fn := range data.Functions {
+		fnName := *fn.FunctionName
+		fns = append(fns, fnName)
+	}
+
+	return fns, nil
 }
 
 func (bt *Lambdabeat) Setup(b *beat.Beat) error {
