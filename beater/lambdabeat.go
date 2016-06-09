@@ -27,6 +27,7 @@ type Lambdabeat struct {
 	metrics    []string
 	functions  []string
 	region     string
+	backfill   time.Time
 }
 
 // Creates beater
@@ -92,9 +93,10 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		if err != nil {
 			return err
 		} else {
-			bt.lastTime = t
+			bt.backfill = t
 		}
 	} else {
+		bt.backfill = time.Time{}
 		bt.lastTime = time.Now()
 	}
 
@@ -180,26 +182,35 @@ func (bt *Lambdabeat) Run(b *beat.Beat) error {
 			return nil
 		case <-ticker.C:
 		}
+		if !bt.backfill.IsZero() {
+			logp.Info("running backfill: %v", bt.backfill)
+			bt.RunBackfill()
+		} else {
+			logp.Info("running periodic")
+			bt.RunPeriodic()
+		}
+	}
+}
 
-		now := time.Now()
+func (bt *Lambdabeat) RunPeriodic() error {
+	now := time.Now()
 
-		for _, fn := range bt.functions {
-			for _, m := range bt.metrics {
-				events, err := bt.FetchFunctionMetric(fn, m, now)
-				if err != nil {
-					logp.Err("error: %v", err)
-				} else {
-					for _, event := range events {
-						bt.client.PublishEvent(event)
-						logp.Info("Event sent")
-					}
+	for _, fn := range bt.functions {
+		for _, m := range bt.metrics {
+			events, err := bt.FetchFunctionMetric(fn, m, now)
+			if err != nil {
+				logp.Err("error: %v", err)
+			} else {
+				for _, event := range events {
+					bt.client.PublishEvent(event)
+					logp.Info("Event sent")
 				}
 			}
 		}
-
-		bt.lastTime = now
 	}
 
+	bt.lastTime = now
+	return nil
 }
 
 func (bt *Lambdabeat) Cleanup(b *beat.Beat) error {

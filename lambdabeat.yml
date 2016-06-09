@@ -4,15 +4,15 @@
 
 lambdabeat:
   # Defines how often an event is sent to the output
-  period: 60s
+  period: 10s
   # Defines the interval in which to group Lambda metrics
-  interval: 60s
+  interval: 60
   # Lambda functions for which to collect metrics
   functions: ["infra-issue-stats"]
   # Metrics to collect
-  metrics: ["Invocations", "Duration"]
+  metrics: ["Invocations", "Duration", "Errors", "Throttles"]
   # Optionally specify a start date for historical ingest
-  backfill_date: "2016-06-06T00:00:00.000Z"
+  backfill_date: "2016-06-09T00:00:00.000Z"
   region: "us-east-1"
 
 
