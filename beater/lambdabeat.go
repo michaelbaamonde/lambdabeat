@@ -56,7 +56,7 @@ func (bt *Lambdabeat) Config(b *beat.Beat) error {
 func ListAllLambdaFunctions(region string) ([]string, error) {
 	svc := lambda.New(session.New(), &aws.Config{Region: aws.String(region)})
 
-	data, err := svc.ListFunctions(nil)
+	data, err := svc.ListFunctions(&lambda.ListFunctionsInput{})
 
 	if err != nil {
 		return nil, err
@@ -64,9 +64,31 @@ func ListAllLambdaFunctions(region string) ([]string, error) {
 
 	var fns []string
 
+	// Get first page of results
 	for _, fn := range data.Functions {
 		fnName := *fn.FunctionName
 		fns = append(fns, fnName)
+	}
+
+	// If there is more than one page, keep requesting pages until we get them all
+	marker := data.NextMarker
+	for marker != nil {
+		input := &lambda.ListFunctionsInput{
+			Marker: aws.String(*marker),
+		}
+
+		data, err := svc.ListFunctions(input)
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, fn := range data.Functions {
+			fnName := *fn.FunctionName
+			fns = append(fns, fnName)
+		}
+
+		marker = data.NextMarker
 	}
 
 	return fns, nil
@@ -104,12 +126,6 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		bt.metrics = []string{"Invocations", "Duration", "Errors", "Throttles"}
 	}
 
-	if len(cfg.Functions) >= 1 {
-		bt.functions = cfg.Functions
-	} else {
-		return errors.New("Must provide a list of Lambda functions.")
-	}
-
 	if cfg.BackfillDate != "" {
 		t, err := time.Parse(common.TsLayout, cfg.BackfillDate)
 		if err != nil {
@@ -126,6 +142,17 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		bt.region = cfg.Region
 	} else {
 		return errors.New("Must provide an AWS region.")
+	}
+
+	if len(cfg.Functions) >= 1 {
+		bt.functions = cfg.Functions
+	} else {
+		fns, err := ListAllLambdaFunctions(bt.region)
+		if err != nil {
+			return err
+		}
+		logp.Info("No functions configured, using: %v", fns)
+		bt.functions = fns
 	}
 
 	bt.client = b.Publisher.Connect()
