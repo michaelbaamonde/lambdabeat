@@ -205,10 +205,10 @@ func (bt *Lambdabeat) Run(b *beat.Beat) error {
 		case <-ticker.C:
 		}
 		if !bt.backfill.IsZero() {
-			logp.Info("running backfill: %v", bt.backfill)
+			logp.Info("Running backfill from date: %v", bt.backfill)
 			bt.RunBackfill()
 		} else {
-			logp.Info("running periodic")
+			logp.Info("Running periodically.")
 			bt.RunPeriodic()
 		}
 	}
