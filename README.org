@@ -42,14 +42,7 @@ Cloudwatch maintains data for these metrics with respect to Lambda:
 
 These are largely self-explanatory, but see [[http://docs.aws.amazon.com/lambda/latest/dg/monitoring-functions-metrics.html][here]] for details and subtleties.
 
-Once more, specify which metrics you would like to fetch and ship in
-=lambdabeat.yml= in the following fashion:
-
-#+BEGIN_EXAMPLE
-  lambdabeat:
-      metrics: ["Invocations", "Duration"]
-#+END_EXAMPLE
-
+Lambdabeat fetches and indexes all of these.
 ** Period and Interval
 
 Unlike many (really, most) other Beats, Lambdabeat's notion of a =period= does

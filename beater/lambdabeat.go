@@ -3,6 +3,7 @@ package beater
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/elastic/beats/libbeat/beat"
@@ -25,7 +26,6 @@ type Lambdabeat struct {
 	interval               int64
 	lastTime               time.Time
 	client                 publisher.Client
-	metrics                []string
 	functions              []string
 	functionConfigurations map[string]lambda.FunctionConfiguration
 	region                 string
@@ -140,12 +140,6 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		return errors.New("Interval must be a multiple of 60.")
 	}
 
-	if len(cfg.Metrics) >= 1 {
-		bt.metrics = cfg.Metrics
-	} else {
-		bt.metrics = []string{"Invocations", "Duration", "Errors", "Throttles"}
-	}
-
 	if cfg.BackfillDate != "" {
 		t, err := time.Parse(common.TsLayout, cfg.BackfillDate)
 		if err != nil {
@@ -187,7 +181,6 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 	logp.Debug("lambdabeat", "Initializing lambdabeat")
 	logp.Debug("lambdabeat", "Period: %s\n", bt.period)
 	logp.Debug("lambdabeat", "Functions: %v\n", bt.functions)
-	logp.Debug("lambdabeat", "Metrics: %v\n", bt.metrics)
 	logp.Debug("lambdabeat", "Time: %s\n", bt.lastTime)
 
 	return nil
@@ -224,8 +217,25 @@ func (bt *Lambdabeat) Stop() {
 
 /// *** Processing logic ***///
 
-func (bt *Lambdabeat) FetchFunctionMetric(fn string, metric string, end time.Time) ([]common.MapStr, error) {
-	var stats []common.MapStr
+type Datapoints []cloudwatch.Datapoint
+
+func (slice Datapoints) Less(i, j int) bool {
+	t1 := slice[i].Timestamp
+	t2 := *slice[j].Timestamp
+
+	return t1.Before(t2)
+}
+
+func (slice Datapoints) Len() int {
+	return len(slice)
+}
+
+func (slice Datapoints) Swap(i, j int) {
+	slice[i], slice[j] = slice[j], slice[i]
+}
+
+func (bt *Lambdabeat) FetchFunctionMetric(fn string, metric string, end time.Time) (Datapoints, error) {
+	var stats Datapoints
 
 	svc := cloudwatch.New(session.New(), &aws.Config{Region: aws.String(bt.region)})
 
@@ -254,53 +264,113 @@ func (bt *Lambdabeat) FetchFunctionMetric(fn string, metric string, end time.Tim
 
 	if err != nil {
 		return nil, err
-	} else {
-		fnConfig := bt.functionConfigurations[fn]
-
-		for _, d := range data.Datapoints {
-			timestr := d.Timestamp.Format(common.TsLayout)
-			t, _ := common.ParseTime(timestr)
-
-			event := common.MapStr{
-				"type":          "metric",
-				"function":      fn,
-				"metric":        metric,
-				"@timestamp":    t,
-				"average":       d.Average,
-				"maximum":       d.Maximum,
-				"minimum":       d.Minimum,
-				"sample-count":  d.SampleCount,
-				"sum":           d.Sum,
-				"unit":          d.Unit,
-				"description":   *fnConfig.Description,
-				"last-modified": *fnConfig.LastModified,
-				"memory-size":   *fnConfig.MemorySize,
-				"runtime":       *fnConfig.Runtime,
-				"code-size":     *fnConfig.CodeSize,
-				"handler":       *fnConfig.Handler,
-				"timeout":       *fnConfig.Timeout,
-				"version":       *fnConfig.Version,
-			}
-			stats = append(stats, event)
-		}
-
-		return stats, nil
 	}
+
+	for _, d := range data.Datapoints {
+		stats = append(stats, *d)
+	}
+
+	return stats, nil
+}
+
+func (bt *Lambdabeat) CreateEvents(fn string, end time.Time) ([]common.MapStr, error) {
+	var events []common.MapStr
+
+	fnConfig := bt.functionConfigurations[fn]
+
+	// Fetch all metrics for the time period
+	invocations, err := bt.FetchFunctionMetric(fn, "Invocations", end)
+	if err != nil {
+		return nil, err
+	}
+
+	errors, err := bt.FetchFunctionMetric(fn, "Errors", end)
+	if err != nil {
+		return nil, err
+	}
+
+	duration, err := bt.FetchFunctionMetric(fn, "Duration", end)
+	if err != nil {
+		return nil, err
+	}
+
+	throttles, err := bt.FetchFunctionMetric(fn, "Throttles", end)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort the arrays of Datapoints so that we don't mix up time periods
+	// when combining into a document
+	sort.Sort(invocations)
+	sort.Sort(errors)
+	sort.Sort(duration)
+	sort.Sort(throttles)
+
+	// Index a single document for each timestamp
+	for i := 0; i < len(invocations); i++ {
+		inv := invocations[i]
+		err := errors[i]
+		dur := duration[i]
+		thr := throttles[i]
+
+		timestr := inv.Timestamp.Format(common.TsLayout)
+		t, _ := common.ParseTime(timestr)
+
+		event := common.MapStr{
+			"@timestamp":               t,
+			"type":                     "metric",
+			"function":                 fn,
+			"description":              *fnConfig.Description,
+			"last-modified":            *fnConfig.LastModified,
+			"memory-size":              *fnConfig.MemorySize,
+			"runtime":                  *fnConfig.Runtime,
+			"code-size":                *fnConfig.CodeSize,
+			"handler":                  *fnConfig.Handler,
+			"timeout":                  *fnConfig.Timeout,
+			"version":                  *fnConfig.Version,
+			"invocations-average":      inv.Average,
+			"invocations-maximum":      inv.Maximum,
+			"invocations-minimum":      inv.Minimum,
+			"invocations-sum":          inv.Sum,
+			"invocations-sample-count": inv.SampleCount,
+			"invocations-unit":         inv.Unit,
+			"errors-average":           err.Average,
+			"errors-maximum":           err.Maximum,
+			"errors-minimum":           err.Minimum,
+			"errors-sum":               err.Sum,
+			"errors-sample-count":      err.SampleCount,
+			"errors-unit":              err.Unit,
+			"duration-average":         dur.Average,
+			"duration-maximum":         dur.Maximum,
+			"duration-minimum":         dur.Minimum,
+			"duration-sum":             dur.Sum,
+			"duration-sample-count":    dur.SampleCount,
+			"duration-unit":            dur.Unit,
+			"throttles-average":        thr.Average,
+			"throttles-maximum":        thr.Maximum,
+			"throttles-minimum":        thr.Minimum,
+			"throttles-sum":            thr.Sum,
+			"throttles-sample-count":   thr.SampleCount,
+			"throttles-unit":           thr.Unit,
+		}
+		events = append(events, event)
+	}
+
+	return events, nil
+
 }
 
 func (bt *Lambdabeat) RunPeriodic() error {
 	now := time.Now()
 
 	for _, fn := range bt.functions {
-		for _, m := range bt.metrics {
-			events, err := bt.FetchFunctionMetric(fn, m, now)
-			if err != nil {
-				logp.Err("error: %v", err)
-			} else {
-				for _, event := range events {
-					bt.client.PublishEvent(event)
-					logp.Info("Event sent")
-				}
+		events, err := bt.CreateEvents(fn, now)
+		if err != nil {
+			logp.Err("error: %v", err)
+		} else {
+			for _, event := range events {
+				bt.client.PublishEvent(event)
+				logp.Info("Event sent")
 			}
 		}
 	}
@@ -348,16 +418,14 @@ func (bt *Lambdabeat) RunBackfill() error {
 	for _, r := range ranges {
 		logp.Info("start: %v, end: %v", r.start, r.end)
 		for _, fn := range bt.functions {
-			for _, m := range bt.metrics {
-				bt.lastTime = r.start
-				events, err := bt.FetchFunctionMetric(fn, m, r.end)
-				if err != nil {
-					logp.Err("error: %v", err)
-				} else {
-					for _, event := range events {
-						bt.client.PublishEvent(event)
-						logp.Info("Event sent")
-					}
+			bt.lastTime = r.start
+			events, err := bt.CreateEvents(fn, r.end)
+			if err != nil {
+				logp.Err("error: %v", err)
+			} else {
+				for _, event := range events {
+					bt.client.PublishEvent(event)
+					logp.Info("Event sent")
 				}
 			}
 		}
