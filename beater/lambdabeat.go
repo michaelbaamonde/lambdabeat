@@ -220,7 +220,7 @@ func (bt *Lambdabeat) Stop() {
 type Datapoints []cloudwatch.Datapoint
 
 func (slice Datapoints) Less(i, j int) bool {
-	t1 := slice[i].Timestamp
+	t1 := *slice[i].Timestamp
 	t2 := *slice[j].Timestamp
 
 	return t1.Before(t2)
