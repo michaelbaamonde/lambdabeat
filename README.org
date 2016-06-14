@@ -5,6 +5,91 @@
 Lambdabeat allows you to ship AWS Lambda metrics (by way of the Cloudwatch API)
 to Elasticsearch.
 
+Here is an example of a document produced by Lambdabeat:
+
+#+BEGIN_SRC es
+  POST http://localhost:9200/lambdabeat-2016.06.14/_search?pretty
+  {
+    "size": 1,
+    "query": {
+      "match_all": {}
+    }
+  }
+#+END_SRC
+
+#+begin_example
+{
+  "took" : 3,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 5,
+    "successful" : 5,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : 79,
+    "max_score" : 1.0,
+    "hits" : [ {
+      "_index" : "lambdabeat-2016.06.14",
+      "_type" : "metric",
+      "_id" : "AVVQbTk8fZl27BsUqkOv",
+      "_score" : 1.0,
+      "_source" : {
+        "@timestamp" : "2016-06-14T01:03:00.000Z",
+        "beat" : {
+          "hostname" : "baamonde-ThinkPad-T460s",
+          "name" : "baamonde-ThinkPad-T460s"
+        },
+        "code-size" : 3564954,
+        "description" : "my lambda function",
+        "duration-average" : 2718.6,
+        "duration-maximum" : 2718.6,
+        "duration-minimum" : 2718.6,
+        "duration-sample-count" : 1,
+        "duration-sum" : 2718.6,
+        "duration-unit" : "Milliseconds",
+        "errors-average" : 0,
+        "errors-maximum" : 0,
+        "errors-minimum" : 0,
+        "errors-sample-count" : 1,
+        "errors-sum" : 0,
+        "errors-unit" : "Count",
+        "function" : "my-lambda-function",
+        "handler" : "my-lambda-function.handler",
+        "invocations-average" : 1,
+        "invocations-maximum" : 1,
+        "invocations-minimum" : 1,
+        "invocations-sample-count" : 1,
+        "invocations-sum" : 1,
+        "invocations-unit" : "Count",
+        "last-modified" : "2016-04-04T02:46:48.557+0000",
+        "memory-size" : 128,
+        "runtime" : "python2.7",
+        "throttles-average" : 0,
+        "throttles-maximum" : 0,
+        "throttles-minimum" : 0,
+        "throttles-sample-count" : 1,
+        "throttles-sum" : 0,
+        "throttles-unit" : "Count",
+        "timeout" : 60,
+        "type" : "metric",
+        "version" : "$LATEST"
+      }
+    } ]
+  }
+}
+#+end_example
+
+* Installation
+
+Binaries are available [[https://github.com/michaelbaamonde/lambdabeat/releases][here]].
+
+Released packages contain:
+
+1. The =lambdabeat= binary.
+2. An example =lambdabeat.yml" configuration file.
+3. The =lambdabeat.template.json= mapping template.
+
 * Configuration and Usage
 
 ** AWS: Credentials and Region
