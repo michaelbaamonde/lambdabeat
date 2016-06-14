@@ -1,33 +1,11 @@
-BEATNAME=lambdabeat
-BEAT_DIR=github.com/michaelbaamonde
-SYSTEM_TESTS=false
-TEST_ENVIRONMENT=false
-ES_BEATS=./vendor/github.com/elastic/beats
-GOPACKAGES=$(shell glide novendor)
-PREFIX?=.
+.PHONY: lambdabeat
+lambdabeat:
+	go build
 
-# Path to the libbeat Makefile
--include $(ES_BEATS)/libbeat/scripts/Makefile
-
-.PHONY: init
-init:
-	glide update  --no-recursive
-	make update
-	git init
-
-.PHONY: commit
-commit:
-	git add README.md CONTRIBUTING.md
-	git commit -m "Initial commit"
-	git add LICENSE
-	git commit -m "Add the LICENSE"
-	git add .gitignore .gitattributes
-	git commit -m "Add git settings"
-	git add .
-	git reset -- .travis.yml
-	git commit -m "Add lambdabeat"
-	git add .travis.yml
-	git commit -m "Add Travis CI"
+.PHONY: clean
+clean:
+	go clean
+	rm -f lambdabeat lambdabeat-*.tar.gz
 
 .PHONY: update-deps
 update-deps:
@@ -36,3 +14,12 @@ update-deps:
 # This is called by the beats packer before building starts
 .PHONY: before-build
 before-build:
+
+VERSION=$(shell grep 'var Version' main.go | sed 's/.*"\([^"]*\)"/\1/')
+TARBALL=lambdabeat-$(VERSION)-x86_64.tar.gz
+.PHONY: release
+release: clean lambdabeat
+	tar -c --transform 's,^,lambdabeat-$(VERSION)/,' \
+      -zf $(TARBALL) \
+	  lambdabeat lambdabeat.template.json lambdabeat.yml README.org
+	tar tf $(TARBALL)

@@ -111,63 +111,16 @@ To run Lambdabeat with debugging output enabled, run:
     ./lambdabeat -c lambdabeat.yml -e -d "*"
 #+END_EXAMPLE
 
-*** Test
-
-To test Lambdabeat, run the following command:
-
-#+BEGIN_EXAMPLE
-    make testsuite
-#+END_EXAMPLE
-
-alternatively:
-
-#+BEGIN_EXAMPLE
-    make unit-tests
-    make system-tests
-    make integration-tests
-    make coverage-report
-#+END_EXAMPLE
-
-The test coverage is reported in the folder =./build/coverage/=
-
 *** Package
 
-To be able to package Lambdabeat the requirements are as follows:
-
--  [[https://docs.docker.com/engine/installation/][Docker Environment]]
-   >= 1.10
--  $GOPATH/bin must be part of $PATH:
-   =export PATH=${PATH}:${GOPATH}/bin=
-
-To cross-compile and package Lambdabeat for all supported platforms, run
-the following commands:
+To produce a versioned tarball containing the lambdabeat binary, lambdabeat.yml,
+and lambdabeat index template, run:
 
 #+BEGIN_EXAMPLE
-    cd dev-tools/packer
-    make deps
-    make images
-    make
-#+END_EXAMPLE
-
-*** Update
-
-Each beat has a template for the mapping in elasticsearch and a
-documentation for the fields which is automatically generated based on
-=etc/fields.yml=. To generate etc/lambdabeat.template.json and
-etc/lambdabeat.asciidoc
-
-#+BEGIN_EXAMPLE
-    make update
+  make release
 #+END_EXAMPLE
 
 *** Cleanup
-
-To clean Lambdabeat source code, run the following commands:
-
-#+BEGIN_EXAMPLE
-    make fmt
-    make simplify
-#+END_EXAMPLE
 
 To clean up the build directory and generated artifacts, run:
 
