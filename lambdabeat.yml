@@ -4,13 +4,12 @@
 
 lambdabeat:
   # Defines how often an event is sent to the output
-  period: 10s
+  period: 600s
   # Defines the interval in which to group Lambda metrics
   interval: 60
   # Lambda functions for which to collect metrics
   functions: []
-  # Optionally specify a start date for historical ingest
-  backfill_date: "2016-06-08T00:00:00.000Z"
+  # AWS region
   region: "us-east-1"
 
 

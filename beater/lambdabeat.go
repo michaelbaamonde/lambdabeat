@@ -2,6 +2,7 @@ package beater
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"sort"
 	"time"
@@ -30,13 +31,44 @@ type Lambdabeat struct {
 	functionConfigurations map[string]lambda.FunctionConfiguration
 	region                 string
 	backfill               time.Time
+	CmdLineArgs            CmdLineArgs
+}
+
+type CmdLineArgs struct {
+	backfill *string
+}
+
+var cmdLineArgs CmdLineArgs
+
+func init() {
+	cmdLineArgs = CmdLineArgs{
+		backfill: flag.String("backfill-date", "", "Start date for backfill"),
+	}
+}
+
+func (bt *Lambdabeat) HandleFlags(b *beat.Beat) error {
+	if *bt.CmdLineArgs.backfill != "" {
+		t, err := time.Parse(common.TsLayout, *bt.CmdLineArgs.backfill)
+		if err != nil {
+			return err
+		} else {
+			bt.backfill = t
+		}
+	} else {
+		bt.backfill = time.Time{}
+		bt.lastTime = time.Now()
+	}
+	return nil
 }
 
 // Creates beater
 func New() *Lambdabeat {
-	return &Lambdabeat{
+	lb := &Lambdabeat{
 		done: make(chan struct{}),
 	}
+	lb.CmdLineArgs = cmdLineArgs
+
+	return lb
 }
 
 /// *** Beater interface methods ***///
@@ -138,18 +170,6 @@ func (bt *Lambdabeat) Setup(b *beat.Beat) error {
 		bt.interval = cfg.Interval
 	} else {
 		return errors.New("Interval must be a multiple of 60.")
-	}
-
-	if cfg.BackfillDate != "" {
-		t, err := time.Parse(common.TsLayout, cfg.BackfillDate)
-		if err != nil {
-			return err
-		} else {
-			bt.backfill = t
-		}
-	} else {
-		bt.backfill = time.Time{}
-		bt.lastTime = time.Now()
 	}
 
 	if cfg.Region != "" {
