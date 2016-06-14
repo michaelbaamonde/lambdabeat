@@ -5,7 +5,7 @@
 Lambdabeat allows you to ship AWS Lambda metrics (by way of the Cloudwatch API)
 to Elasticsearch.
 
-* Configuration
+* Configuration and Usage
 
 ** AWS: Credentials and Region
 
@@ -65,12 +65,15 @@ only really makes sense for =period= to be greater than or equal to =interval=.
 ** Backfilling data
 
 If you would like to index data that predates the first invocation of
-Lambdabeat, you may do so by specifying a =backfill_date= in =lambdabeat.yml=.
-This will fetch and index all data between =backfill_date= and the time at which
-Lambdabeat begins running.
+Lambdabeat, you may do so by passing a the option =-backfill-date= when invoking
+lambdabeat. This will fetch and index all data between the given =backfill-date=
+and the time at which Lambdabeat begins running.
 
-This feature is currently experimental and will likely be re-implemented
-entirely.
+For example:
+
+#+BEGIN_SRC sh
+  lambdabeat -e -v -backfill-date="2016-06-08T00:00:00.000Z"
+#+END_SRC
 
 ** Outputs
 
